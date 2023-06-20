@@ -1,14 +1,35 @@
 # MicroWrap
 
-MicroWrap is a base container image designed to streamline and simplify the process of developing and deploying microservices through the use of containerization.
+MicroWrap is a base container image designed to streamline and simplify the process of developing and deploying microservices through the use of containerization. Using it is as simple as writing a Dockerfile for your application, and including a `microwrap.json` configuration; see the example below:
 
-MicroWrap functions as an executable wrapper, abstracting the complexities of network communication and service execution away from the application itself. It consists of an HTTP server that listens for incoming HTTP requests and translates those HTTP requests to command-line invocations of the wrapped executable. The translation process supports parameters -- URL parameters embedded in the request will become `--option value` strings passed to the wrapped executable. The standard output of the wrapped executable will be returned as the body of the response to the triggering request. For example, the request `GET http://localhost/execute?option1=test2&flag1` would trigger the invocation `/executable/path --option1 "test2" --flag1`, and the standard output would be returned as the body of the response to the `GET` HTTP request.
+```Dockerfile
+# Create an image using microwrap as the base to serve as our runtime image
+FROM michionlion/microwrap:latest
+# Configure microwrap
+COPY microwrap.json /microwrap.json
+# Upload executable to expose as a service
+COPY version.sh /version.sh
+```
 
-The base container image MicroWrap defines should be used as the base image for a further Dockerfile build, which can specify mounting locations, compile or upload the executable to be wrapped, and configure MicroWrap. An example container image using MicroWrap to run a version service is defined in this repository at `example/Dockerfile`.
+MicroWrap functions as an executable wrapper, abstracting the complexities of network communication and service execution away from the application itself. It consists of an HTTP server that listens for incoming HTTP requests and translates those HTTP requests to command-line invocations of the wrapped executable. The translation process supports parameters -- URL parameters embedded in the request will become `--option value` strings passed to the wrapped executable. The standard output of the wrapped executable will be returned as the body of the response to the triggering request.
+
+As an example, suppose the following request was made to a container running microwrap:
+
+```shell
+http GET http://$HOST:$PORT/start?option1=test2&flag1
+```
+
+This request would trigger microwrap to execute its configured executable with:
+
+```shell
+/executable/path --option1 "test2" --flag1`
+```
+
+The standard output of the execution would be returned as the body of the response to the `GET` HTTP request, and if the executable exits with a non-zero return code, an HTTP 500 Internal Server Error is returned (with the body being the concatenated standard output and standard error streams).
 
 ## Usage
 
-To make your application a containerized service, you will need to write a Dockerfile that builds an image. This image can then be used in many different containerized environments, such as Docker, OpenShift, Kubernetes, and others. The Dockerfile for your application needs to accomplish two tasks: allow execution of your program, and configure MicroWrap. To allow your program to execute, the Dockerfile should install dependencies that your program needs, compile your program, and configure the runtime environment so that your program can execute. Additionally, you may want to prepare mount points for any folders that may need to be accessed by your program for external reading/writing, in the case that such input/output is needed.
+To make your application a containerized service, you will need to write a Dockerfile that builds an image. This image can then be used in many different containerized environments, such as Docker, OpenShift, Kubernetes, and others. The Dockerfile for your application needs to accomplish two tasks: allow execution of your program, and configure MicroWrap. To allow your program to execute, the Dockerfile should install dependencies that your program needs, compile your program, and configure the runtime environment so that your program can execute. Additionally, you may want to prepare mount points for any folders that may need to be accessed by your program for external reading/writing, in the case that such input/output is needed. An example (which specifically uses a Java program, but is applicable to many different languages and technologies) is given in the `example/` directory of this repository.
 
 ## Configuration
 
