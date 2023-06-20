@@ -16,11 +16,19 @@ pylint = "^2.17.4"
 taskipy = "^1.11.0"
 cython = "^0.29.35"
 
+[tool.taskipy.settings]
+use_vars = true
+
+[tool.taskipy.variables]
+get_includes = "python -c \"import sysconfig; print(sysconfig.get_path('include'))\""
+get_libdir = "python -c \"import sysconfig; print(sysconfig.get_config_var('LIBDIR'))\""
+get_lib = "python -c \"import sysconfig; print(sysconfig.get_config_var('LIBRARY').replace('lib', '', 1).rstrip('.a'))\""
+get_ldflags = "python -c \"import sysconfig; print(sysconfig.get_config_var('LDFLAGS'))\""
+
 [tool.taskipy.tasks]
 lint = { cmd = "pylint microwrap", help = "check code style with pylint" }
-
-pre_compile = { cmd = "cython -3 --embed -o microwrap.c microwrap/microwrap.py", help = "transpile code to C with cython" }
-compile = { cmd = "gcc -I<> -L<> -lpython3.11 -o microwrap microwrap.c ", help = "compile code to single executable with cython" }
+pre_compile = { cmd = "mkdir -p build && cython -3 --embed -o build/microwrap.c microwrap/microwrap.py", help = "transpile code to C with cython" }
+compile = { cmd = "gcc -v -I$({get_includes}) -L$({get_libdir}) -l$({get_lib}) $({get_ldflags}) -o build/microwrap build/microwrap.c", help = "compile code to single executable with cython" }
 
 [build-system]
 requires = ["poetry-core"]

@@ -1,0 +1,4 @@
+# Compilation temporary products
+build/
+*.c
+*.so
