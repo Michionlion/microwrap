@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "microwrap"
+version = "1.0.0"
+description = "Translate HTTP requests to invocations of an arbitrary executable"
+authors = ["Saejin Mahlau-Heinert <saejinmh@va.wagner.com>"]
+license = "UNLICENSED"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "==3.11.3"
+bjoern = "^3.2.2"
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
+pylint = "^2.17.4"
+taskipy = "^1.11.0"
+
+[tool.taskipy.tasks]
+lint = { cmd = "pylint microwrap", help = "check code style with pylint" }
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
