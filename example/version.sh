@@ -2,7 +2,7 @@
 
 USE_JAVA=true
 
-if [ "$USE_JAVA" == "true" ]; then
+if [ "$USE_JAVA" == "true" && -f Version.class ]; then
     java Version.class
 else
     VERSION="1.0.0"
