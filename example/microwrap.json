@@ -1,6 +1,8 @@
 {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "concurrent": false,
     "executablePath": "/version.sh",
-    "maxActiveRequests": 0,
     "allowedParameters": [
         "include-build"
     ],

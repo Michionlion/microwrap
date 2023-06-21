@@ -1,17 +1,14 @@
 """MicroWrap."""
+import errno
 import json
 import os
-import signal
 import subprocess
-import sys
 import threading
 import traceback
-import wsgiref.simple_server as server
-from concurrent.futures import ThreadPoolExecutor
-from http.server import BaseHTTPRequestHandler
-from queue import Empty, Queue
-from typing import Any, Dict, Iterable, List, Union
+from socketserver import ThreadingMixIn
+from typing import Any, Dict, Iterable, List, Tuple, Union
 from urllib.parse import parse_qs
+from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
 from wsgiref.types import StartResponse, WSGIEnvironment
 
 
@@ -25,6 +22,30 @@ class Config:
                 self.config = json_config
             else:
                 raise ValueError("Invalid configuration file!")
+
+    def get_host(self) -> str:
+        """Return the host to bind to."""
+        # TODO: verify valid config
+        # should be a string
+        return self.config.get("host", "0.0.0.0")
+
+    def get_port(self) -> int:
+        """Return the port to bind to."""
+        # TODO: verify valid config
+        # should be an integer and valid port
+        return self.config.get("port", 80)
+
+    def get_concurrent(self) -> int:
+        """Return whether to run a multithreaded server."""
+        # TODO: verify valid config
+        # should be a boolean
+        return self.config.get("concurrent", True)
+
+    def get_executable_path(self) -> str:
+        """Return the path to the executable."""
+        # TODO: verify valid config
+        # should be an existing path
+        return self.config.get("executablePath")
 
     def get_allowed_params(self) -> List[str]:
         """Return the list of allowed query-string parameters."""
@@ -40,18 +61,6 @@ class Config:
         # if a value is not a str or bool, error should include "should be a string or boolean"
         return self.config.get("defaultParameters", {})
 
-    def get_executable_path(self) -> str:
-        """Return the path to the executable."""
-        # TODO: verify valid config
-        # should be an existing path
-        return self.config.get("executablePath")
-
-    def get_max_active_requests(self) -> int:
-        """Return the maximum number of active requests."""
-        # TODO: verify valid config
-        # should be a positive integer or 0 (unlimited)
-        return self.config.get("maxActiveRequests", 1)
-
     def __str__(self):
         return str(self.config)
 
@@ -64,9 +73,6 @@ class Config:
 USAGE_HELP = "Usage: microwrap <host> <port>"
 CONFIG_PATH = "microwrap.json"
 MAX_THREADS = os.cpu_count() * 4
-RESPONSE_HEADERS = [
-    ("Server", f"MicroWrap/1.0.0 {Config(CONFIG_PATH).get_executable_path()}")
-]
 
 
 ###
@@ -92,6 +98,20 @@ def parse_query_params(config: Config, query_str) -> Dict[str, str]:
             params[allowed_param] = value[-1]
 
     return params
+
+
+def get_response_headers(body: str | bytes) -> List[str]:
+    """Return the response headers derived from the response body."""
+    if isinstance(body, str):
+        body = body.encode()
+        content = "text/plain"
+    elif isinstance(body, bytes):
+        content = "application/octet-stream"
+    return [
+        ("Server", f"MicroWrap/1.0.0 {Config(CONFIG_PATH).get_executable_path()}"),
+        ("Content-Length", str(len(body))),
+        ("Content-Type", content),
+    ]
 
 
 ###
@@ -126,86 +146,20 @@ class InvocationRequest:
                     self.arguments.append(value)
         return self.arguments
 
-    def execute(self) -> str:
+    def execute(self) -> Tuple[str, int]:
         """Execute the invocation requested."""
-        executable = os.path.abspath(self.config.get_executable_path())
-        arguments = self.get_arguments()
-        print(f"{self.get_label()} Executing '{executable}' with args: {arguments}")
+        cmd = [os.path.abspath(self.config.get_executable_path())]
+        cmd += self.get_arguments()
+        print(f"{self.get_label()} Executing '{cmd}'")
         proc = subprocess.run(
-            executable=executable,
-            args=arguments,
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            check=True,
-            text=True,
+            check=False,
             cwd=".",
             start_new_session=True,
         )
-        return proc.stdout
-
-
-###
-# Threaded WSGI server
-###
-
-
-class ThreadedWSGIServer(server.WSGIServer):
-    """Threaded WSGI Server that uses a ThreadPoolExecutor to handle requests."""
-
-    def __init__(
-        self,
-        host: str,
-        port: int,
-        handler: BaseHTTPRequestHandler,
-        max_workers=None,
-    ):
-        super().__init__((host, port), handler, True)
-        self.requests = Queue()
-        self.executor = ThreadPoolExecutor(max_workers if max_workers else MAX_THREADS)
-        self.is_listening = False
-
-    def process_request(self, request, client_address):
-        """Add requests to the queue instead of handling immediately like super does."""
-        self.requests.put((request, client_address))
-        print(f"Added request {request} from {client_address} to queue")
-        print(f"{self.requests.qsize()} requests in queue")
-
-    def serve_forever(self, poll_interval=0.5):
-        """Continuously handle requests from the queue in separate threads."""
-        signal.signal(signal.SIGINT, lambda _s, _f: self.shutdown())
-        signal.signal(signal.SIGTERM, lambda _s, _f: self.shutdown())
-        self.is_listening = True
-        print("Starting server...")
-        while self.is_listening:
-            try:
-                print(f"Pulling from queue: {self.requests.queue}")
-                request, client_address = self.requests.get(
-                    block=True, timeout=poll_interval
-                )
-                print("Retrieved request")
-                self.executor.submit(
-                    self.process_request_thread, request, client_address
-                )
-                print("Submitted request")
-            except Empty:
-                continue
-
-    def process_request_thread(self, request, client_address):
-        """This function will be executed in a new thread and handle the request."""
-        try:
-            print(f"Processing request {request} from {client_address}")
-            self.finish_request(request, client_address)
-            self.shutdown_request(request)
-        except Exception:
-            self.handle_error(request, client_address)
-            self.shutdown_request(request)
-
-    def shutdown(self):
-        """Stop the server but wait for current requests to complete before exiting."""
-        print("Waiting for requests to  complete...")
-        self.is_listening = False
-        self.executor.shutdown(wait=True, cancel_futures=True)
-        print("Requests complete. Shutting down...")
+        return (proc.stdout.decode(), proc.returncode)
 
 
 ###
@@ -220,37 +174,58 @@ def microwrap(env: WSGIEnvironment, start_response: StartResponse) -> Iterable[b
         handler = InvocationRequest(config, env)
         print(f"{handler.get_label()} Configuration: {config}")
         print(f"{handler.get_label()} Parameters: {handler.params}")
-        response_body = handler.execute()
-        start_response("200 OK", RESPONSE_HEADERS)
-        return [response_body.encode()]
+        body, exitcode = handler.execute()
+        print(f"{handler.get_label()} Finished execution, exit code: {exitcode}")
+        status = "200 OK" if exitcode == 0 else "500 Internal Server Error"
+        start_response(status, get_response_headers(body))
+        return [body.encode()]
     except Exception as ex:
         traceback.print_exception(ex)
-        start_response("500 Internal Server Error", RESPONSE_HEADERS)
-        return [str(ex).encode()]
+        body = f"MicroWrap error: {type(ex)}: {ex}"
+        start_response("500 Internal Server Error", get_response_headers(body))
+        return [body.encode()]
 
 
-def run(host="localhost", port=80):
+###
+# Infrastructure: WSGI server and main method
+###
+
+
+class ThreadedWSGIServer(ThreadingMixIn, WSGIServer):
+    """Threaded WSGI Server that uses a thread for each request."""
+
+    def get_request(self):
+        while True:
+            try:
+                sock, addr = self.socket.accept()
+                if self.verify_request(sock, addr):
+                    return sock, addr
+            except OSError as ex:
+                if ex.errno != errno.EINTR:
+                    raise
+
+
+def run(host="0.0.0.0", port=80, concurrent=True):
     """Run the WSGI application."""
     print(f"Listening on http://{host}:{port}/")
-    httpd = ThreadedWSGIServer(
-        host,
-        port,
-        server.WSGIRequestHandler,
-        max_workers=Config(CONFIG_PATH).get_max_active_requests(),
-    )
+    if concurrent:
+        print("Starting concurrent server...")
+        httpd = ThreadedWSGIServer((host, port), WSGIRequestHandler)
+    else:
+        print("Starting non-concurrent server...")
+        httpd = WSGIServer((host, port), WSGIRequestHandler)
     httpd.set_app(microwrap)
-    httpd.serve_forever(poll_interval=0.5)
+    try:
+        httpd.serve_forever(poll_interval=0.5)
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+        httpd.shutdown()
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        run()
-    elif len(sys.argv) == 2:
-        if sys.argv[1] == "--help" or sys.argv[1] == "-h":
-            print(USAGE_HELP)
-        else:
-            run(sys.argv[1])
-    elif len(sys.argv) == 3:
-        run(sys.argv[1], int(sys.argv[2]))
-    else:
-        print(USAGE_HELP)
+    global_config = Config(CONFIG_PATH)
+    run(
+        global_config.get_host(),
+        global_config.get_port(),
+        global_config.get_concurrent(),
+    )
