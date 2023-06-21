@@ -57,7 +57,7 @@ These configuration parameters should be specified in the `/microwrap.json` conf
 
 - Named invocations and status checking
   - Requires specific endpoints (no more "any endpoint -> invocation").
-  - `http://$HOST:$PORT/start/name?` Start an invocation named `name`; supports parameters (for giving to executable).
+  - `http://$HOST:$PORT/start/name?` Start an invocation named `name`; supports invocation parameters.
   - `http://$HOST:$PORT/stop/name` Stop a running invocation named `name`.
   - `http://$HOST:$PORT/running/name` Check if an invocation named `name` is running.
   - `http://$HOST:$PORT/running` Get list of all running invocations.
