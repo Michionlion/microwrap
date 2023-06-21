@@ -1,6 +1,6 @@
 {
     "executablePath": "/version.sh",
-    "maxActiveRequests": -1,
+    "maxActiveRequests": 0,
     "allowedParameters": [
         "include-build"
     ],

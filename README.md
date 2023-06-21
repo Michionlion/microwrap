@@ -34,7 +34,7 @@ To make your application a containerized service, you will need to write a Docke
 ## Configuration
 
 1. **Executable Path** This is the location of the executable file that will be executed per request. It should be an executable file in your image.
-2. **Max Active Requests** This is the number of wrapped-executable invocations to allow at one time; any requests beyond this number will be queued for future invocation. Specify `-1` for no limit.
+2. **Max Active Requests** This is the number of wrapped-executable invocations to allow at one time; any requests beyond this number will be queued for future invocation. Specify `0` for no limit.
 3. **Allowed Parameters** This is a list of URL parameters that will be passed through as command-line options to the wrapped executable. Any other parameters will be ignored.
 4. **Default Parameters** This is an object which is mapped to `--attribute value` strings passed to the wrapped executable that can be overridden by URL parameters. Values that are `true` will not map to `"true"`, but instead a value-less `--flag` (for an attribute named `flag`) string; values that are `null`, `false`, or the empty string `""` will cause the parameter to be ignored.
 
