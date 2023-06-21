@@ -1,17 +1,15 @@
 """MicroWrap."""
+import os
 import sys
 import json
 from urllib.parse import parse_qs
 import wsgiref.simple_server as server
 import threading
 import subprocess
+import traceback
 
 from typing import Any, Iterable, Dict, List, Union
 from wsgiref.types import WSGIEnvironment, StartResponse
-
-USAGE_HELP = "Usage: microwrap <host> <port>"
-CONFIG_PATH = "/microwrap.json"
-WORKING_DIRECTORY = "/"
 
 
 class Config:
@@ -51,6 +49,26 @@ class Config:
         # should be a positive integer or 0 (unlimited)
         return self.config.get("maxActiveRequests", 1)
 
+    def __str__(self):
+        return str(self.config)
+
+
+###
+# Constants
+###
+
+
+USAGE_HELP = "Usage: microwrap <host> <port>"
+CONFIG_PATH = "microwrap.json"
+RESPONSE_HEADERS = [
+    ("Server", f"MicroWrap/1.0.0 {Config(CONFIG_PATH).get_executable_path()}")
+]
+
+
+###
+# Utility functions
+###
+
 
 def parse_query_params(config: Config, query_str) -> Dict[str, str]:
     """Parse parameters from the request."""
@@ -60,7 +78,7 @@ def parse_query_params(config: Config, query_str) -> Dict[str, str]:
 
     params = {
         key: "" if value is True else value
-        for key, value in default_params
+        for key, value in default_params.items()
         if value is not False
     }
 
@@ -72,6 +90,11 @@ def parse_query_params(config: Config, query_str) -> Dict[str, str]:
     return params
 
 
+###
+# Request handler
+###
+
+
 class InvocationRequest:
     """An invocation request."""
 
@@ -80,38 +103,48 @@ class InvocationRequest:
         # self.input_body = env["wsgi.input"].read()
         # self.errors = env["wsgi.errors"]
         self.method = env.get("REQUEST_METHOD", "")
-        self.path = env.get("SCRIPT_NAME", "") + env.get("PATH_TRANSLATED", "")
-        self.params = parse_query_params(config, env.get("QUERY_STRING", ""))
+        self.path = env.get("PATH_INFO", "/")
+        self.query = env.get("QUERY_STRING", "")
+        self.params = parse_query_params(config, self.query)
         self.arguments = None
 
     def get_label(self) -> str:
         """Get logging prefix for this request."""
-        return f"[{self.method}][{self.path}][{threading.get_native_id()}]"
+        return (
+            f"[{threading.get_native_id()}][{self.method}][{self.path}][{self.query}]"
+        )
 
     def get_arguments(self):
         """Get the arguments to pass to the executable."""
         if self.arguments is None:
             self.arguments = []
-            for key, value in self.params:
+            for key, value in self.params.items():
                 self.arguments.append(f"--{key}")
                 if value.strip() != "":
                     self.arguments.append(value)
         return self.arguments
 
     def execute(self) -> str:
-        """Execute the invocation indicated by this request."""
-        print(f"{self.get_label()} Executing with arguments: {self.get_arguments()}")
+        """Execute the invocation requested."""
+        executable = os.path.abspath(self.config.get_executable_path())
+        arguments = self.get_arguments()
+        print(f"{self.get_label()} Executing '{executable}' with args: {arguments}")
         proc = subprocess.run(
-            executable=self.config.get_executable_path(),
-            args=self.get_arguments(),
+            executable=executable,
+            args=arguments,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=True,
             text=True,
-            cwd=WORKING_DIRECTORY,
+            cwd=".",
             # start_new_session=True,
         )
         return proc.stdout
+
+
+###
+# Main application
+###
 
 
 def microwrap(env: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
@@ -119,14 +152,14 @@ def microwrap(env: WSGIEnvironment, start_response: StartResponse) -> Iterable[b
     try:
         config = Config(CONFIG_PATH)
         handler = InvocationRequest(config, env)
-
         print(f"{handler.get_label()} Configuration: {config}")
         print(f"{handler.get_label()} Parameters: {handler.params}")
         response_body = handler.execute()
-        start_response("200 OK", [])
+        start_response("200 OK", RESPONSE_HEADERS)
         return [response_body.encode()]
     except Exception as ex:
-        start_response("500 Internal Server Error", [])
+        traceback.print_exception(ex)
+        start_response("500 Internal Server Error", RESPONSE_HEADERS)
         return [str(ex).encode()]
 
 
