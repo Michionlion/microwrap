@@ -1,15 +1,16 @@
 # Build microwrap
-FROM alpine:latest as build
+FROM python:3.11-buster as build
 
 # Install dependencies
 WORKDIR /microwrap
-RUN apk add --no-cache build-base libev poetry
+RUN apt update && apt install -y build-essential libev-dev
 COPY . /microwrap
+RUN pip install poetry
 RUN poetry install
 RUN poetry run task compile
 
 # Create microwrap image
-FROM alpine:latest
+FROM python:3.11-slim-buster
 
 COPY --from=build /microwrap/build/microwrap /usr/bin/microwrap
 
