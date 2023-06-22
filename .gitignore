@@ -1,0 +1,10 @@
+# Compilation temporary products
+build/
+*.c
+*.so
+
+# Manual test files
+/microwrap.json
+/test.sh
+/microwrap.err
+/microwrap.log

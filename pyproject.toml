@@ -1,0 +1,41 @@
+[tool.poetry]
+name = "microwrap"
+version = "1.0.0"
+description = "Translate HTTP requests to invocations of an arbitrary executable"
+authors = ["Saejin Mahlau-Heinert <saejinmh@va.wagner.com>"]
+license = "UNLICENSED"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+bjoern = "^3.2.2"
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
+pylint = "^2.17.4"
+taskipy = "^1.11.0"
+cython = "^0.29.35"
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = ["fixme", "broad-exception-caught"]
+
+[tool.taskipy.settings]
+use_vars = true
+
+[tool.taskipy.variables]
+get_includes = "python -c \"import sysconfig; print(sysconfig.get_path('include'))\""
+get_libdir = "python -c \"import sysconfig; print(sysconfig.get_config_var('LIBDIR'))\""
+get_lib = "python -c \"import sysconfig; print(sysconfig.get_config_var('LIBRARY').replace('lib', '', 1).rstrip('.a'))\""
+get_ldflags = "python -c \"import sysconfig; print(sysconfig.get_config_var('LDFLAGS'))\""
+
+[tool.taskipy.tasks]
+lint = { cmd = "pylint microwrap", help = "check code style with pylint" }
+pre_compile = { cmd = "mkdir -p build && cython -3 --embed -o build/microwrap.c microwrap/microwrap.py", help = "transpile code to C with cython" }
+compile = { cmd = "gcc -v -I$({get_includes}) -L$({get_libdir}) -l$({get_lib}) $({get_ldflags}) -o build/microwrap build/microwrap.c", help = "compile code to single executable with cython" }
+docker = { cmd = "docker build -t michionlion/microwrap:latest .", help = "build docker image" }
+pre_example = { cmd = "docker build -t microwrap-example:latest example", help = "build example docker image" }
+example = { cmd = "set -x && docker run --name microwrap-example -p 3000:80 microwrap-example:latest", help = "run example docker image" }
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
