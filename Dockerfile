@@ -3,7 +3,7 @@ FROM alpine:latest as build
 
 # Install dependencies
 WORKDIR /microwrap
-RUN apk add --no-cache poetry
+RUN apk add --no-cache build-base libev poetry
 COPY . /microwrap
 RUN poetry install
 RUN poetry run task compile
