@@ -30,8 +30,8 @@ lint = { cmd = "pylint microwrap", help = "check code style with pylint" }
 pre_compile = { cmd = "mkdir -p build && cython -3 --embed -o build/microwrap.c microwrap/microwrap.py", help = "transpile code to C with cython" }
 compile = { cmd = "gcc -v -I$({get_includes}) -L$({get_libdir}) -l$({get_lib}) $({get_ldflags}) -o build/microwrap build/microwrap.c", help = "compile code to single executable with cython" }
 docker = { cmd = "docker build -t michionlion/microwrap:latest .", help = "build docker image" }
-pre_example = { cmd = "docker build -t microwrap-example:latest .", help = "build example docker image", cwd = "example" }
-example = { cmd = "docker run --name microwrap-example -p 3000:80 microwrap-example:latest", help = "run example docker image" }
+pre_example = { cmd = "docker build -t microwrap-example:latest example", help = "build example docker image" }
+example = { cmd = "set -x && docker run --name microwrap-example -p 3000:80 microwrap-example:latest", help = "run example docker image" }
 
 [build-system]
 requires = ["poetry-core"]
