@@ -41,7 +41,7 @@ class RotatingLogger:
         if message:
             self.terminal.write(message + "\n")
             self.log.emit(logging.makeLogRecord({"msg": message}))
-            self.log.flush()
+            self.flush()
 
     def flush(self):
         """Flush the log."""
