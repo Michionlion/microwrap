@@ -52,6 +52,8 @@ jobs:
           poetry env info
       - name: Install dependencies
         run: poetry install --no-interaction --no-ansi
+      - name: Install system dependencies
+        run: sudo apt install libev-dev
       - name: Build docker image
         run: poetry run task docker
       - name: Build example docker image
