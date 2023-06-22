@@ -1,5 +1,3 @@
-package example;
-
 public class Version {
     public static void main(String[] args) {
         var VERSION = "1.0.0";
