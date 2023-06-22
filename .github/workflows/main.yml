@@ -1,0 +1,56 @@
+name: Check Quality
+
+on: [push, pull_request, workflow_call]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: 1.5.1
+      - name: Setup Poetry
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+          poetry env info
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-ansi
+      - name: Lint code
+        run: poetry run task lint
+      - name: Lint writing
+        uses: actionshub/markdownlint@main
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: 1.5.1
+      - name: Setup Poetry
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+          poetry env info
+      - name: Build docker image
+        run: poetry run task docker
+      - name: Build example docker image
+        run: poetry run task pre_example
+      # - name: Test example docker image
+      # run: poetry run task test_example
