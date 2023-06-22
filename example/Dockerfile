@@ -17,3 +17,5 @@ COPY microwrap.json /microwrap.json
 COPY version.sh /version.sh
 # Copy compiled code from the build image
 COPY --from=build /Version.class /Version.class
+
+EXPOSE 80
