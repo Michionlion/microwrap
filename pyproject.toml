@@ -16,6 +16,9 @@ pylint = "^2.17.4"
 taskipy = "^1.11.0"
 cython = "^0.29.35"
 
+[tool.pylint.'MESSAGES CONTROL']
+disable = ["fixme", "broad-exception-caught"]
+
 [tool.taskipy.settings]
 use_vars = true
 
