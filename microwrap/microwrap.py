@@ -1,15 +1,60 @@
 """MicroWrap."""
 import errno
 import json
+import logging
 import os
 import subprocess
+import sys
 import threading
 import traceback
+from logging.handlers import RotatingFileHandler
 from socketserver import ThreadingMixIn
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, TextIO, Tuple, Union
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
 from wsgiref.types import StartResponse, WSGIEnvironment
+
+###
+# Logging
+###
+
+
+class RotatingLogger:
+    """A logger that writes to a file and rotates it when it gets too big."""
+
+    def __init__(
+        self,
+        terminal: TextIO,
+        log_file: str,
+        max_bytes=20 * 1_000_000,
+        backup_count=5,
+    ):
+        self.terminal = terminal
+        self.log = RotatingFileHandler(
+            log_file, maxBytes=max_bytes, backupCount=backup_count
+        )
+        self.log.setFormatter(logging.Formatter("%(message)s"))
+
+    def write(self, message: str):
+        """Write a message to the log."""
+        message = message.strip("\n")
+        if message:
+            self.terminal.write(message + "\n")
+            self.log.emit(logging.makeLogRecord({"msg": message}))
+            self.log.flush()
+
+    def flush(self):
+        """Flush the log."""
+        self.terminal.flush()
+        self.log.flush()
+
+    def close(self):
+        """Close the log."""
+        self.log.close()
+
+
+sys.stdout = RotatingLogger(sys.stdout, "microwrap.log")
+sys.stderr = RotatingLogger(sys.stderr, "microwrap.err")
 
 
 class Config:
