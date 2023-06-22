@@ -35,13 +35,6 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          push: false
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-      - name: Debug
-        run: |
-          docker ps -a
-          docker images -a
-
-# VERSION=$(echo "${{ github.event.release.tag_name }}" | sed -e 's/^v//')
-# type=raw,value=latest,enable={{is_default_branch}}
