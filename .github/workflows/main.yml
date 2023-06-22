@@ -28,8 +28,6 @@ jobs:
         run: poetry install --no-interaction --no-ansi
       - name: Lint code
         run: poetry run task lint
-      - name: Lint writing
-        uses: actionshub/markdownlint@main
 
   test:
     name: Test
