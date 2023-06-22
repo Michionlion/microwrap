@@ -2,3 +2,7 @@
 build/
 *.c
 *.so
+
+# Manual test files
+/microwrap.json
+/test.sh

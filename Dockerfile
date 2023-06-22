@@ -1,15 +1,16 @@
 # Build microwrap
-FROM alpine:3.18 as build
+FROM alpine:latest as build
 
 # Install dependencies
+WORKDIR /microwrap
 RUN apk add --no-cache poetry
+COPY . /microwrap
 RUN poetry install
 RUN poetry run task compile
 
 # Create microwrap image
-FROM alpine:3.18
+FROM alpine:latest
 
-COPY --from=build /microwrap /usr/bin/microwrap
-COPY --from=build /usr/local/lib/libmicrohttpd.so.12 /usr/local/lib
+COPY --from=build /microwrap/build/microwrap /usr/bin/microwrap
 
 ENTRYPOINT [ "microwrap" ]
