@@ -3,13 +3,14 @@ import errno
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
 import threading
 import traceback
 from logging.handlers import RotatingFileHandler
 from socketserver import ThreadingMixIn
-from typing import Any, Dict, Iterable, List, TextIO, Tuple, Union
+from typing import Dict, Iterable, List, TextIO, Tuple, Union
 from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
 from wsgiref.types import StartResponse, WSGIEnvironment
@@ -109,6 +110,27 @@ class Config:
     def __str__(self):
         return str(self.config)
 
+    def get_argument_templates(self) -> List[str] | None:
+        """Return optional ordered argv templates for selected parameters."""
+        templates = self.config.get("argumentTemplates")
+        if templates is not None and (
+            not isinstance(templates, list)
+            or not all(isinstance(template, str) for template in templates)
+        ):
+            raise ValueError("argumentTemplates must be an array of strings")
+        return templates
+
+    def get_timeout(self) -> float | None:
+        """Return the optional maximum execution time in seconds."""
+        timeout = self.config.get("timeoutSeconds")
+        if timeout is not None and (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not 0 < timeout < float("inf")
+        ):
+            raise ValueError("timeoutSeconds must be a positive finite number")
+        return timeout
+
 
 ###
 # Constants
@@ -153,7 +175,7 @@ def get_response_headers(body: str | bytes) -> List[str]:
     elif isinstance(body, bytes):
         content = "application/octet-stream"
     return [
-        ("Server", f"MicroWrap/1.0.0 {Config(CONFIG_PATH).get_executable_path()}"),
+        ("Server", f"MicroWrap/1.1.0 {Config(CONFIG_PATH).get_executable_path()}"),
         ("Content-Length", str(len(body))),
         ("Content-Type", content),
     ]
@@ -164,10 +186,23 @@ def get_response_headers(body: str | bytes) -> List[str]:
 ###
 
 
+class _TemplateParameters(dict):
+    """Track parameters consumed while formatting argument templates."""
+
+    def __init__(self, parameters):
+        super().__init__(parameters)
+        self.used = set()
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        self.used.add(key)
+        return value
+
+
 class InvocationRequest:
     """An invocation request."""
 
-    def __init__(self, config: Dict[str, Any], env: WSGIEnvironment):
+    def __init__(self, config: Config, env: WSGIEnvironment):
         self.config = config
         # self.input_body = env["wsgi.input"].read()
         # self.errors = env["wsgi.errors"]
@@ -175,7 +210,6 @@ class InvocationRequest:
         self.path = env.get("PATH_INFO", "/")
         self.query = env.get("QUERY_STRING", "")
         self.params = parse_query_params(config, self.query)
-        self.arguments = None
 
     def get_label(self) -> str:
         """Get logging prefix for this request."""
@@ -183,28 +217,40 @@ class InvocationRequest:
 
     def get_arguments(self):
         """Get the arguments to pass to the executable."""
-        if self.arguments is None:
-            self.arguments = []
-            for key, value in self.params.items():
-                self.arguments.append(f"--{key}")
-                if value.strip() != "":
-                    self.arguments.append(value)
-        return self.arguments
+        parameters = _TemplateParameters(self.params)
+        templates = self.config.get_argument_templates() or []
+        arguments = [template.format_map(parameters) for template in templates]
+        for key, value in self.params.items():
+            if key not in parameters.used:
+                arguments.append(f"--{key}")
+                if value.strip():
+                    arguments.append(value)
+        return arguments
 
     def execute(self) -> Tuple[str, int]:
         """Execute the invocation requested."""
         cmd = [os.path.abspath(self.config.get_executable_path())]
         cmd += self.get_arguments()
+        timeout = self.config.get_timeout()
         print(f"{self.get_label()} Executing '{cmd}'")
-        proc = subprocess.run(
+        with subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            check=False,
             cwd=".",
             start_new_session=True,
-        )
-        return (proc.stdout.decode(), proc.returncode)
+        ) as proc:
+            try:
+                stdout, _ = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # Stop children of wrapper scripts as well as the executable.
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait()
+                raise
+        return (stdout.decode(errors="replace"), proc.returncode)
 
 
 ###
@@ -223,6 +269,10 @@ def microwrap(env: WSGIEnvironment, start_response: StartResponse) -> Iterable[b
         print(f"{handler.get_label()} Finished execution, exit code: {exitcode}")
         status = "200 OK" if exitcode == 0 else "500 Internal Server Error"
         start_response(status, get_response_headers(body))
+        return [body.encode()]
+    except subprocess.TimeoutExpired:
+        body = "MicroWrap execution timed out"
+        start_response("504 Gateway Timeout", get_response_headers(body))
         return [body.encode()]
     except Exception as ex:
         traceback.print_exception(ex)

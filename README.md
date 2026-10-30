@@ -39,6 +39,8 @@ To make your application a containerized service, you will need to write a Docke
 1. **Concurrent** Whether to allow multiple requests to execute invocations concurrently; if `false`, only one invocation will be handled at a time.
 1. **Allowed Parameters** This is a list of URL parameters that will be passed through as command-line options to the wrapped executable. Any other parameters will be ignored.
 1. **Default Parameters** This is an object which is mapped to `--attribute value` strings passed to the wrapped executable that can be overridden by URL parameters. Values that are `true` will not map to `"true"`, but instead a value-less `--flag` (for an attribute named `flag`) string; values that are `null`, `false`, or the empty string `""` will cause the parameter to be ignored.
+1. **Argument Templates** Optional ordered arguments (`argumentTemplates`) containing literal text and `{parameter}` placeholders, such as `"{input}"` or `"configFile={config}"`. Values come from defaults and allowed URL parameters. Unreferenced parameters follow as `--name value` or `--flag`; an omitted or empty list uses this automatic format for all parameters. Spaces and shell characters stay literal. Missing placeholders return HTTP 500 before execution.
+1. **Timeout Seconds** This is an optional positive, finite number (`timeoutSeconds`) that limits how long an invocation may run. On timeout, MicroWrap kills the invocation's process group and waits for the executable, then returns HTTP 504 Gateway Timeout. Omit this setting to allow unlimited execution time.
 
 These configuration parameters should be specified in the `/microwrap.json` configuration file in your image:
 
@@ -55,6 +57,55 @@ These configuration parameters should be specified in the `/microwrap.json` conf
   }
 }
 ```
+
+### Direct CLI argument example
+
+For an executable that accepts a positional input and `key=value` arguments, use
+`argumentTemplates` in `/microwrap.json`:
+
+```json
+{
+  "executablePath": "/opt/project/program",
+  "allowedParameters": ["input", "config", "output", "threads"],
+  "argumentTemplates": [
+    "{input}",
+    "configFile={config}",
+    "jsonOutputFile={output}"
+  ],
+  "timeoutSeconds": 300
+}
+```
+
+With this configuration, a request such as:
+
+```shell
+http GET "http://$HOST:$PORT/start?input=/data/input.json&config=/data/config.json&output=/data/output.json&threads=4"
+```
+
+invokes the executable with the template arguments first, followed by the
+unreferenced `threads` parameter:
+
+```shell
+/opt/project/program /data/input.json configFile=/data/config.json jsonOutputFile=/data/output.json --threads 4
+```
+
+## Building and testing
+
+Use Python 3.11 and Poetry 1.5.1 with the checked-in lockfile. Install a C compiler
+and libev development headers first (`libev-dev` on Debian/Ubuntu):
+
+```shell
+poetry install
+poetry run task test
+poetry run task lint
+poetry run task docker
+poetry run task pre_example
+```
+
+The images use Debian Bookworm. CI builds and tests the example service on both
+`linux/amd64` and `linux/arm64`. The existing release/manual publishing workflow
+publishes both architectures in one image tag. Releases keep their version tags;
+a manual run on the default branch also updates `latest`.
 
 ## Future Work
 
