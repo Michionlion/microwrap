@@ -8,3 +8,7 @@ build/
 /test.sh
 /microwrap.err
 /microwrap.log
+
+# Python test/import caches
+__pycache__/
+*.pyc

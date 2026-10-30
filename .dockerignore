@@ -1,2 +1,10 @@
 /build
 /.github
+/.git
+/.venv
+**/__pycache__
+*.pyc
+/microwrap.json
+/microwrap.log
+/microwrap.err
+/test.sh
